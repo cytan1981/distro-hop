@@ -5,3 +5,5 @@ Only ISO file as upgrade media is supported currently.
 Please put ISO file under /mnt/iso in the format '${ISO_NAME}-${DST_OS_VERSION}-${ARCH}-dvd.iso'
 For example:
 AlmaLinux-10.0-x86_64-dvd.iso
+
+The work directory is /root/distro-hop_${DST_OS_CLASS), e.g. /root/distro-hop_el10
