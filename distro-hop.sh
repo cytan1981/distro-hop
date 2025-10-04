@@ -219,6 +219,16 @@ function post_upgrade()
         echo "To do post upgrade again, please run 'export FORCE_POST_UPGRADE=1'"
         return 0
     }
+    
+    # Prevent deleting upgraded packages when using 'export FORCE_POST_UPGRADE=1'
+    local current_os_class=$(rpm -qf /etc/${OS_NAME}-release | awk -F '.' '{ print $(NF-1) }')
+    prtlog -f $logfile "Comparing target os class"
+    if [ "${current_os_class}" = "${DST_OS_CLASS}" ];then
+        prtlog -f $logfile "Result: OK (specified ${DST_OS_CLASS}, detected ${current_os_class})"
+    else
+        prtlog -f $logfile "Result: Error (specified ${DST_OS_CLASS}, detected ${current_os_class})"
+        exit 1
+    fi
 
     prtlog -f $logfile ">>> Post Upgrade"
 
@@ -240,7 +250,7 @@ function post_upgrade()
         prtlog -f $logfile "List all remained ${SRC_OS} packages to $pkgs_list"
         rpm -qa --qf '%{name}@%{version}@%{release}@%{arch}@%{vendor}\n' \
         | sort \
-        | $EGREP -v ".${DST_OS_CLASS}" > $pkgs_list
+        | $EGREP -v ".${current_os_class}" > $pkgs_list
         /bin/cp -af $pkgs_list ${pkgs_list}.orig
     fi
     
