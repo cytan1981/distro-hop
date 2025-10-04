@@ -173,6 +173,8 @@ function disable_old_repos()
 
 function upgrade()
 {
+    logfile=$LOG_FILE
+
     if [ -e $LOG_DIR/upgrade.done ];then
         echo "Skipped for uprade.done found"
         return 0
@@ -180,21 +182,19 @@ function upgrade()
 
     prtlog "Remove conflict packages"
     (
-    if [ "${SRC_OS_CLASS}" = "el8" -a "${DST_OS_CLASS}" = "el10" ];then
-        rpm -q crda 2>&1 > /dev/nulll && dnf remove -y crda
-    fi
+        if [ "${SRC_OS_CLASS}" = "el8" -a "${DST_OS_CLASS}" = "el10" ];then
+            rpm -q crda 2>&1 > /dev/nulll && dnf remove -y crda
+        fi
 
-    [ "${DST_OS_CLASS}" = "el9" ] && {
-        prtlog "Remove initscripts"
-        yum remove -y initscripts 2>&1 >> $logfile
-    }
-    
-    if [ "${DST_OS_CLASS}" = "el10" ];then
+        [ "${DST_OS_CLASS}" = "el9" ] && {
+            prtlog "Remove initscripts"
+            yum remove -y initscripts 2>&1 >> $logfile
+        }
+        
         for pkg in ${OS_NAME}-logos iptables-ebtables;do
             rpm -q $pkg 2>&1 > /dev/null && rpm -e --nodeps $pkg
         done
         DNF_OPTS="--nobest"
-    fi
     ) 2>&1 >> $LOG_FILE
 
     prtlog ">>> Upgrade ${OS_NAME}-${OS_VERSION} to ${OS_NAME}-${DST_OS_VERSION} by dnf distro-sync"
