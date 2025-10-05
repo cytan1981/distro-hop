@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bash
 
 if [ $# -lt 1 ];then
-    echo "$0 { upgrade_version }"
+    echo "$0 { upgrade_version } { --use-distro-repos }"
     exit 1
 fi
 
@@ -10,6 +10,33 @@ fi
 # Only ISO file as upgrade media is supported currently.
 # Please put ISO file under /mnt/iso in the format ${ISO_NAME}-${DST_OS_VERSION}-${ARCH}-dvd.iso
 # For example: AlmaLinux-10.0-x86_64-dvd.iso
+
+DST_OS_VERSION=$1
+USE_DISTRO_REPOS=0
+shift
+
+while [ $# -gt 0 ];do
+    case $1 in 
+        --use-distro-repos)
+            # Some packages moved to CRB repo on el10
+            USE_DISTRO_REPOS=1
+            shift
+            continue;
+            ;;
+        --mirror)
+            if [ $# -ge 2 ];then
+                MIRROR_URL=$2
+                echo "Mirror URL=$MIRROR_URL"
+                echo "Note: using mirror will ignore --use-distro-repos"
+                shift 2
+                break
+            else
+                echo "Error: Mirror URL not specified!"
+                exit 1
+            fi            
+            ;;
+    esac
+done
 
 MIN_OS_VERSION=8.4
 ARCH=$(uname -m)
@@ -24,18 +51,18 @@ EXCLUDE_VENDORS=$OS_VENDOR
 ISO_NAME=$OS_NAME
 [ "${OS_NAME}" != "rhel" ] && ISO_NAME=$(grep '^NAME=' /etc/os-release | awk -F '[" ]' '{ print $2 }')
 
-DST_OS_VERSION=$1
 DST_OS=${OS_NAME}-$DST_OS_VERSION
 DST_OS_REPO_FILE=${DST_OS}.repo
 DST_OS_ISO=$ISO_DIR/${ISO_NAME}-${DST_OS_VERSION}-${ARCH}-dvd.iso
 DST_OS_ISO_MP=/mnt/${DST_OS}
 
-SRC_OS_CLASS=$(rpm -qf /etc/${OS_NAME}-release | awk -F '.' '{ print $(NF-1) }')
+SRC_OS_CLASS=$(rpm -qf /etc/profile | awk -F '.' '{ print $(NF-1) }' | sed -e 's/_.*//g')
 DST_OS_CLASS=el$(echo $DST_OS_VERSION | awk '{ print int($1) }')
 
 LOG_DIR=/root/distro-hop_${DST_OS_CLASS}
 LOG_FILE=$LOG_DIR/upgrade.log
 mkdir -p $LOG_DIR
+touch $LOG_FILE
 
 function sigint_func()
 {
@@ -160,11 +187,17 @@ function disable_old_repos()
     prtlog -f $logfile "Disable old repos"
     local saved_dir=saved_repos
     cd /etc/yum.repos.d
-
     mkdir -p $saved_dir
-    saved_list=$(/bin/ls -A | $EGREP -v "$DST_OS_REPO_FILE|$saved_dir|saved")
-    [ -n "$saved_list" ] && /bin/mv -f $saved_list $saved_dir
 
+    if [ $USE_DISTRO_REPOS -eq 1 ];then
+        repos_pkg=${OS_NAME}-repos
+        rpm -q $repos_pkg 2>&1>/dev/null && rpm -e --nodeps  2>&1 >> $logfile
+        saved_list=$(/bin/ls -A *.repo 2>/dev/null)
+    else
+        saved_list=$(/bin/ls -A *.repo 2>/dev/null | $EGREP -v "$DST_OS_REPO_FILE")
+    fi
+
+    [ -n "$saved_list" ] && /bin/mv -f $saved_list $saved_dir
     (yum clean all; yum makecache) 2>&1 > /dev/null
 
     prtlog -f $logfile "Reset dnf modules"
@@ -174,6 +207,7 @@ function disable_old_repos()
 function upgrade()
 {
     logfile=$LOG_FILE
+    > $logfile
 
     if [ -e $LOG_DIR/upgrade.done ];then
         echo "Skipped for uprade.done found"
@@ -181,24 +215,48 @@ function upgrade()
     fi
 
     prtlog "Remove conflict packages"
-    (
-        if [ "${SRC_OS_CLASS}" = "el8" -a "${DST_OS_CLASS}" = "el10" ];then
-            rpm -q crda 2>&1 > /dev/nulll && dnf remove -y crda
-        fi
+    
+    [ "${DST_OS_CLASS}" = "el9" ] && {
+        prtlog "Remove initscripts"
+        yum remove -y initscripts 2>&1 >> $logfile
+    }
 
-        [ "${DST_OS_CLASS}" = "el9" ] && {
-            prtlog "Remove initscripts"
-            yum remove -y initscripts 2>&1 >> $logfile
-        }
+    for pkg in ${OS_NAME}-logos iptables-ebtables;do
+        rpm -q $pkg 2>&1 > /dev/null && rpm -e --nodeps $pkg 2>&1 >> $logfile
+    done
+
+    if [ "${SRC_OS_CLASS}" = "el8" -a "${DST_OS_CLASS}" = "el10" ];then
+        rpm -q crda 2>&1 > /dev/nulll && dnf remove -y crda 2>&1 >> $logfile
         
-        for pkg in ${OS_NAME}-logos iptables-ebtables;do
-            rpm -q $pkg 2>&1 > /dev/null && rpm -e --nodeps $pkg
-        done
-        DNF_OPTS="--nobest"
-    ) 2>&1 >> $LOG_FILE
+        # Some packages like virt-manager are moved CRB repo on el10
+        if [ $USE_DISTRO_REPOS -eq 1 ];then
+            cd /etc/yum.repos.d
+            local saved_dir=saved_${DST_OS_CLASS}
+            mkdir -p $saved_dir
+            local saved_list=$(/bin/ls -A *.repo 2>/dev/null)
+            [ -n "${saved_list}" ] && /bin/mv -f $saved_list $saved_dir
+
+            find $DST_OS_ISO_MP \
+                -name "${OS_NAME}-repos-*" -o \
+                -name "${OS_NAME}-gpg-keys-*" -o \
+                -name "${OS_NAME}-release-*" \
+            | while read pkg;do 
+                rpm -ivh --nodeps --force $pkg 2>&1 >> $logfile
+            done
+
+            cd /etc/yum.repos.d
+            for repo_file in *.repo;do             
+                [ -e ${repo_file}.orig ] || sed -i.orig -e "s/\$releasever/${DST_OS_VERSION}/g" $repo_file
+            done
+
+            prtlog "Enable CRB repo for ${DST_OS_CLASS}"
+            (yum config-manager --enable crb
+            yum clean all; yum makecache) >> $logfile
+        fi
+    fi
 
     prtlog ">>> Upgrade ${OS_NAME}-${OS_VERSION} to ${OS_NAME}-${DST_OS_VERSION} by dnf distro-sync"
-    (dnf -y --releasever=$DST_OS_VERSION --allowerasing --setopt=deltarpm=false $DNF_OPTS distro-sync \
+    (dnf -y --releasever=$DST_OS_VERSION --allowerasing --setopt=deltarpm=false --nobest distro-sync \
         && update-crypto-policies --set LEGACY \
         && rpm --rebuilddb) 2>&1 >> $LOG_FILE \
         && touch $LOG_DIR/upgrade.done
@@ -213,7 +271,8 @@ function post_upgrade()
     local install_list=$LOG_DIR/found_in_${DST_OS_CLASS}.lst
 
     touch $logfile
-
+    
+    cd $LOG_DIR
     [ -e $post_done ] && {
         echo "Post upgrade has been done, skipped"
         echo "To do post upgrade again, please run 'export FORCE_POST_UPGRADE=1'"
@@ -221,8 +280,13 @@ function post_upgrade()
     }
     
     # Prevent deleting upgraded packages when using 'export FORCE_POST_UPGRADE=1'
+    [ -e upgrade.done ] || {
+        echo "Error: file upgrade.done not found, please upgrade system first"
+        return 1
+    }
+    
     local current_os_class=$(rpm -qf /etc/${OS_NAME}-release | awk -F '.' '{ print $(NF-1) }')
-    prtlog -f $logfile "Comparing target os class"
+    prtlog -f $logfile "Comparing target OS class"
     if [ "${current_os_class}" = "${DST_OS_CLASS}" ];then
         prtlog -f $logfile "Result: OK (specified ${DST_OS_CLASS}, detected ${current_os_class})"
     else
@@ -234,10 +298,21 @@ function post_upgrade()
 
     local saved_dir=saved_$DST_OS_CLASS
     cd /etc/yum.repos.d
-    prtlog "Saved the .repo files of ${OS_NAME}-repos to /etc/yum.repos.d/${saved_dir}"
     mkdir -p $saved_dir
-    saved_list=$(/bin/ls -A | $EGREP -v "${DST_OS_REPO_FILE}|$saved_dir|saved")
-    [ -n "$saved_list" ] && /bin/mv -f $saved_list $saved_dir
+    if [ "${OS_NAME}" != "rhel" ];then
+        if [ $USE_DISTRO_REPOS -eq 1 ];then
+            prtlog -f $logfile "Using repo files of ${OS_NAME}-repos"
+            [ -e $DST_OS_REPO_FILE ] && /bin/mv -f ${DST_OS_REPO_FILE} $saved_dir
+            for repo_file in *.repo;do
+                rpm -qf $repo_file 2>&1 > /dev/null || /bin/mv -f $repo_file $saved_dir
+            done
+        else
+            prtlog -f $logfile "Saved repo files of ${OS_NAME}-repos to /etc/yum.repos.d/${saved_dir}"
+            prtlog -f $logfile "Warning: Some old packages like virt-manager will be removed when using ISO repo only"
+            saved_list=$(/bin/ls -A | $EGREP -v "${DST_OS_REPO_FILE}|$saved_dir|saved")
+            [ -n "$saved_list" ] && /bin/mv -f $saved_list $saved_dir
+        fi
+    fi
 
     prtlog -f $logfile "Make yum cache for listing old packages"
     (yum clean all; yum makecache) 2>&1 > /dev/null
@@ -288,7 +363,7 @@ function post_upgrade()
     fi
     systemctl daemon-reload
     cd /usr/bin
-    /bin/ln -sfv $(/bin/ls -A python[0-9].*) python3
+    /bin/ln -sf $(/bin/ls -A python[0-9].*) python3
 
     prtlog -f $logfile "Make yum cache after removing old packages"
     (yum clean all
