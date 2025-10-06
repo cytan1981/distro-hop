@@ -40,33 +40,33 @@ If you have more than one 8.x host, then you can upgrade the first host and save
 
 `cd /mnt/repo`
 
-`for dir in \*;do
-    new_dir=$(echo $dir|cut -d '-' -f 1)-10.0-local
-    /bin/mv -f $dir $new_dir
-    cd $new_dir
-    `mv packages/* ./
-    rmdir packages
-    cd ..
-    createrepo $new_dir
-done`
+`for dir in \*;do<br/>
+    `new_dir=$(echo $dir|cut -d '-' -f 1)-10.0-local`<br/>
+    `/bin/mv -f $dir $new_dir`<br/>
+    `cd $new_dir`<br/>
+    `mv packages/* ./`<br/>
+    `rmdir packages`<br/>
+    `cd ..`<br/>
+    `createrepo $new_dir`<br/>
+done`<br/>
 
-`cd /mnt/repo`
+`cd /mnt/repo`<br/>
 
-`for dir in *;do`
-    `echo "[$dir]"`
-    `echo "name=$dir"`
-    `echo "baseurl=file:///mnt/repo/$dir"`
-    `echo "gpgcheck=0"`
-    `echo "enable=1"`
-    `echo`
-`done > /root/create_repo_file.sh`
+`for dir in *;do`<br/>
+    `echo "[$dir]"`<br/>
+    `echo "name=$dir"`<br/>
+    `echo "baseurl=file:///mnt/repo/$dir"`<br/>
+    `echo "gpgcheck=0"`<br/>
+    `echo "enable=1"`<br/>
+    `echo`<br/>
+`done > /root/create_repo_file.sh`<br/>
 
-`chmod 755 /root/create_repo_file.sh`
-`/root/create_repo_file.sh > /etc/yum.repos.d/local.repo`
+`chmod 755 /root/create_repo_file.sh`<br/>
+`/root/create_repo_file.sh > /etc/yum.repos.d/local.repo`<br/>
 
 ## Copy /mnt/repo and local.repo to another host(s)
 
-`scp -rp /etc/yum.repos.d/local.repo otheHost:/etc/yum.repos.d/`
+`scp -rp /etc/yum.repos.d/local.repo otheHost:/etc/yum.repos.d/`<br/>
 `scp -rp /mnt/repo otheHost:/mnt`
 
 ## Upgrade another host using --use-local-repo option
