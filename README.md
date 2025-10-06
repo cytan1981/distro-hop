@@ -26,13 +26,12 @@ If you have more than one 8.x host, then you can upgrade the first host and save
 
 ## Download packages after reboot
 
-`dnf install -y createrepo`
-
 ` dnf reinstall -y --downloadonly --setopt=keepcache-1 $(rpm -qa|sort)` 
 
 ## Create repos of downloaded packages
 
 <pre>
+dnf install -y --setopt=keepcache=1 createrepo
 cd /var/cache/dnf
 find . -name '*.rpm' > /root/cached_rpms.lst
 mkdir -p /mnt/repo
