@@ -40,15 +40,17 @@ If you have more than one 8.x host, then you can upgrade the first host and save
 
 `cd /mnt/repo`
 
-`for dir in \*;do<br/>
-    `new_dir=$(echo $dir|cut -d '-' -f 1)-10.0-local`<br/>
-    `/bin/mv -f $dir $new_dir`<br/>
-    `cd $new_dir`<br/>
-    `mv packages/* ./`<br/>
-    `rmdir packages`<br/>
-    `cd ..`<br/>
-    `createrepo $new_dir`<br/>
-done`<br/>
+<pre>
+for dir in \*;
+    new_dir=$(echo $dir|cut -d '-' -f 1)-10.0-local
+    /bin/mv -f $dir $new_dir
+    cd $new_dir
+    mv packages/* ./
+    rmdir packages
+    cd ..
+    createrepo $new_dir
+done
+</pre>
 
 `cd /mnt/repo`<br/>
 
