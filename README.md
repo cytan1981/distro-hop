@@ -40,7 +40,7 @@ rsync --files-from=/root/cached_rpms.lst . /mnt/repo/
 
 ## Create repo file of offline repos
 
-<pr>
+<pre>
 cd /mnt/repo
 
 for dir in *;
