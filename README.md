@@ -30,22 +30,20 @@ If you have more than one 8.x host, then you can upgrade the first host and save
 
 ## Create repos of downloaded packages
 
-`dnf install -y createrepo`
-
-`cd /var/cache/dnf`
-
-`find . -name '*.rpm' > /root/cached_rpms.lst`
-
-`mkdir -p /mnt/repo`
-
-`rsync --files-from=/root/cached_rpms.lst . /mnt/repo/`
+<pre>
+dnf install -y createrepo
+cd /var/cache/dnf
+find . -name '*.rpm' > /root/cached_rpms.lst
+mkdir -p /mnt/repo
+rsync --files-from=/root/cached_rpms.lst . /mnt/repo/
+</pre>
 
 ## Create repo file of offline repos
 
-`cd /mnt/repo`
+<pr>
+cd /mnt/repo
 
-<pre>
-for dir in \*;
+for dir in *;
     new_dir=$(echo $dir|cut -d '-' -f 1)-10.0-local
     /bin/mv -f $dir $new_dir
     cd $new_dir
@@ -54,25 +52,26 @@ for dir in \*;
     cd ..
     createrepo $new_dir
 done
+
+cd /mnt/repo
+
+for dir in *;do
+    echo "[$dir]"
+    echo "name=$dir"
+    echo "baseurl=file:///mnt/repo/$dir"
+    echo "gpgcheck=0"
+    echo "enable=1"
+    echo
+done > /root/create_repo_file.sh
+
+chmod 755 /root/create_repo_file.sh
+/root/create_repo_file.sh > /etc/yum.repos.d/local.repo
 </pre>
-
-`cd /mnt/repo`<br/>
-
-`for dir in *;do`<br/>
-    `echo "[$dir]"`<br/>
-    `echo "name=$dir"`<br/>
-    `echo "baseurl=file:///mnt/repo/$dir"`<br/>
-    `echo "gpgcheck=0"`<br/>
-    `echo "enable=1"`<br/>
-    `echo`<br/>
-`done > /root/create_repo_file.sh`<br/>
-
-`chmod 755 /root/create_repo_file.sh`<br/>
-`/root/create_repo_file.sh > /etc/yum.repos.d/local.repo`<br/>
 
 ## Copy /mnt/repo and local.repo to another host(s)
 
 `scp -rp /etc/yum.repos.d/local.repo otheHost:/etc/yum.repos.d/`<br/>
+
 `scp -rp /mnt/repo otheHost:/mnt`
 
 ## Upgrade another host using --use-local-repo option
