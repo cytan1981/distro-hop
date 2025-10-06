@@ -31,9 +31,13 @@ If you have more than one 8.x host, then you can upgrade the first host and save
 ## Create repos of downloaded packages
 
 `dnf install -y createrepo`
+
 `cd /var/cache/dnf`
+
 `find . -name '*.rpm' > /root/cached_rpms.lst`
+
 `mkdir -p /mnt/repo`
+
 `rsync --files-from=/root/cached_rpms.lst . /mnt/repo/`
 
 ## Create repo file of offline repos
