@@ -216,14 +216,10 @@ function upgrade()
     fi
 
     prtlog "Remove conflict packages"
-    for pkg in ${OS_NAME}-logos iptables-ebtables alsa-sof-firmware crda;do
-        rpm -q $pkg 2>&1 > /dev/null && rpm -e --nodeps $pkg 2>&1 >> $logfile
-    done
-    # rpm -q crda 2>&1 > /dev/nulll && dnf remove -y crda 2>&1 >> $logfile
-    [ "${DST_OS_CLASS}" = "el9" ] && {
-        prtlog "Remove initscripts"
-        yum remove -y initscripts 2>&1 >> $logfile
-    }
+    dnf --allowerasing -y --setopt=tsflags=test distro-sync 2>&1 \
+    | egrep 'from package' \
+    | awk '{ print $NF }' | sort | uniq \
+    | while read pkg;do rpm -e --nodeps $pkg;done
 
     if [ $USE_DISTRO_REPOS -eq 1 ];then
         cd /etc/yum.repos.d
@@ -279,13 +275,13 @@ function post_upgrade()
         echo "To do post upgrade again, please run 'export FORCE_POST_UPGRADE=1'"
         return 0
     }
-    
+
     # Prevent deleting upgraded packages when using 'export FORCE_POST_UPGRADE=1'
     [ -e upgrade.done ] || {
         echo "Error: file upgrade.done not found, please upgrade system first"
         return 1
     }
-    
+
     local current_os_class=$(rpm -qf /etc/${OS_NAME}-release | awk -F '.' '{ print $(NF-1) }')
     prtlog -f $logfile "Comparing target OS class"
     if [ "${current_os_class}" = "${DST_OS_CLASS}" ];then
